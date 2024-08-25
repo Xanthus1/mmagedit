@@ -11,6 +11,7 @@ from src import mmimage
 from src import mmdata
 import src.mappermages
 from src import emulaunch
+from src import randomizer
 
 try:
     from PIL import Image, ImageDraw, ImageOps, ImageTk
@@ -527,7 +528,50 @@ class GuiMod(GuiSubWindow):
                         new_value=enabled,
                         prev_value=not enabled
                     ))
-        
+
+# Randomizer window to input seed
+class GuiRandomizer(GuiSubWindow):
+    def __init__(self, core):
+        super().__init__(core, "Randomizer")
+        self.v_randomizer_seed = tk.StringVar()
+
+        self.init()
+
+    def init(self):
+        topbar = tk.Frame(self.window)
+        mainframe = tk.Frame(self.window)
+
+        label = ttk.Label(topbar, text="Randomizer Seed: ")
+        label.grid(column=0, row=0)
+
+        entry = ttk.Entry(topbar, width=25, textvariable = self.v_randomizer_seed)
+        entry.grid(column=1, row=0)
+
+        button = ttk.Button(topbar, text='Randomize', command=lambda: self.randomize_rom())
+        button.grid(column=1, row=2)
+
+        topbar.pack(fill=tk.X)
+        mainframe.pack(fill=tk.BOTH, expand=True)
+
+    def randomize_rom(self):
+        seed = self.v_randomizer_seed.get()
+        print(f"Randomizing using seed: {seed}")
+        # save current hack state for randomize_hack funciton
+        filename = './tmp_randomize_step1.txt'
+        result = self.core.fio_direct(filename, 'hack', True)
+
+        # Randomize new randomized hack
+        new_filename = f'./Micro Mages Randomizer - {seed}.txt'
+        randomizer.randomize_hack(filename, new_filename, seed)
+
+        # Load new hack and refersh UI
+        result = self.core.fio_direct(new_filename, 'hack', False)
+        self.core.refresh_all()
+
+        # Close Randomizer window
+        self.on_close()
+
+
 # 16x16 macro-tile editor
 class GuiMedEdit(GuiSubWindow):
     palette_var_counter = 0
@@ -2248,6 +2292,7 @@ Please remember to save frequently and make backups.
         self.add_menu_command(editmenu, "Macro Tiles...", lambda: self.subwindowctl(GuiMacroEdit, world_idx=self.level.world_idx), "Ctrl+M")
         self.add_menu_command(editmenu, "Med Tiles...", lambda: self.subwindowctl(GuiMedEdit, world_idx=self.level.world_idx), "Ctrl+Shift+M")
         self.add_menu_command(editmenu, "Mods...", lambda: self.subwindowctl(GuiMod), "Ctrl+Shift+D")
+        self.add_menu_command(editmenu, "Randomize", lambda: self.subwindowctl(GuiRandomizer), None)
         #self.add_menu_command(editmenu, "Screen...", lambda: self.subwindowctl(GuiScreenEditor), "Ctrl+Shift+T")
         menu.add_cascade(label="Edit", menu=editmenu)
         
