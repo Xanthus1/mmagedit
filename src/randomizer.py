@@ -5,9 +5,15 @@ Micro Mages Randomizer Script
 By Xanthus
 Skeleton movement patch by nstbayless (NaOH).
 
-Currently randomizes enemies, player shot distances, some enemy behavior,
-and some level hazards (trampolines / fans). Also includes patch for skeletons
-to walk over bridges and fall
+Currently randomizes enemies, player shot distances, difficulty settings,
+some enemy behavior, and some level hazards (trampolines / fans).
+Also includes patch for skeletons to walk over bridges and fall.
+
+Known issues/limitations:
+- Currently if you try to randomize an already randomized patch, there will be
+  an issue due to applying the same asm patches with conflicting labels, as well
+  as some rom patches being added on, but not necessarily overwriting older
+  rom patches. Always randomize from a fresh Base ROM until this is handled properly.
 
 This creates a MMageEdit txt file from a vanilla file. It is incorporated into the
 MMagEdit GUI.
@@ -33,7 +39,6 @@ same folder as this script.
   # Maybe track difficulty of the seed, make sure all randomizations don't go to higher difficulty?
   # Some ghost spawns are in walls, and maybe shouldn't be replaced
     # test for solid space, or ignore randomizing specific spawns
-
 
 enemies = ['skeleton', 'bat', 'goat', 'bone', 'goblin', 'ghost', 'snake', 'troll', 'eye']
 floor_enemies = ['skeleton', 'goat', 'bone', 'goblin', 'snake', 'troll', 'eye']
@@ -91,9 +96,11 @@ def randomize_hack(filename: str, new_filename: str, seed: str):
       new_line = 'hp '+hex(new_hp)[2:]  # change to byte number format (without the '0x' in front)
 
     # Swap Trampolines and Fans sometimes
+    # Only swap a vertical fan if it's pointing upwards (doesn't have -y pointing down)
+    # Otherwise, a ceiling trampoline can push the player into the ceiling and be stuck
     if '- trampoline' in new_line and random.random()>0.75:
       new_line = new_line.replace('- trampoline', '- fanv')
-    elif '- fanv' in new_line and random.random()>0.75:
+    elif '- fanv' in new_line and '-y' not in new_line and random.random()>0.75:
       new_line = new_line.replace('- fanv', '- trampoline')
 
     # Sprite Palette randomization
@@ -109,22 +116,22 @@ def randomize_hack(filename: str, new_filename: str, seed: str):
       blacks_or_whites = [0x00, 0x10, 0x20, 0x30, 0x0D, 0x0F, 0x1D, 0x1F, 0x2D, 0x2F, 0x3D, 0x3F]
 
       if color_r not in blacks_or_whites:
-        color_r = max(color_r+random.randint(-4,4),0)
+        color_r = clamp_palette_color(color_r+random.randint(-4,4))
         # don't randomize to black or white color.
         while color_r in blacks_or_whites:
-          color_r = max(color_r+random.randint(-4,4),0)
+          color_r = clamp_palette_color(color_r+random.randint(-4,4))
 
       if color_g not in blacks_or_whites:
-        color_g = max(color_g+random.randint(-4,4),0)
+        color_g = clamp_palette_color(color_g+random.randint(-4,4))
         # don't randomize to black or white color.
         while color_g in blacks_or_whites:
-          color_g = max(color_g+random.randint(-4,4),0)
+          color_g = clamp_palette_color(color_g+random.randint(-4,4))
 
       if color_b not in blacks_or_whites:
-        color_b = max(color_b+random.randint(-4,4),0)
+        color_b =clamp_palette_color(color_b+random.randint(-4,4))
         # don't randomize to black or white color.
         while color_b in blacks_or_whites:
-          color_b = max(color_b+random.randint(-4,4),0)
+          color_b = clamp_palette_color(color_b+random.randint(-4,4))
 
       '''
       color_r = random.randint(16,40)
@@ -158,22 +165,22 @@ def randomize_hack(filename: str, new_filename: str, seed: str):
       blacks_or_whites = [0x00, 0x10, 0x20, 0x30, 0x0D, 0x0F, 0x1D, 0x1F, 0x2D, 0x2F, 0x3D, 0x3F]
 
       if color_r not in blacks_or_whites:
-        color_r = max(color_r+random.randint(-4,4),0)
+        color_r = clamp_palette_color(color_r+random.randint(-4,4))
         # don't randomize to black or white color.
         while color_r in blacks_or_whites:
-          color_r = max(color_r+random.randint(-4,4),0)
+          color_r = clamp_palette_color(color_r+random.randint(-4,4))
 
       if color_g not in blacks_or_whites:
-        color_g = max(color_g+random.randint(-4,4),0)
+        color_g = clamp_palette_color(color_g+random.randint(-4,4))
         # don't randomize to black or white color.
         while color_g in blacks_or_whites:
-          color_g = max(color_g+random.randint(-4,4),0)
+          color_g = clamp_palette_color(color_g+random.randint(-4,4))
 
       if color_b not in blacks_or_whites:
-        color_b = max(color_b+random.randint(-4,4),0)
+        color_b = clamp_palette_color(color_b+random.randint(-4,4))
         # don't randomize to black or white color.
         while color_b in blacks_or_whites:
-          color_b = max(color_b+random.randint(-4,4),0)
+          color_b = clamp_palette_color(color_b+random.randint(-4,4))
 
       new_line = f'{new_line[:3]} {"{:02x}".format(color_r)} {"{:02x}".format(color_g)} {"{:02x}".format(color_b)}'
       # print(new_line)
@@ -197,28 +204,115 @@ def apply_rompatches(new_data_lines: list):
   # This will need to add custom ASM code / patches
   # Find the line where patches should go, insert after the commented lines
   for i in range(len(new_data_lines)-1,0,-1):
-    if '#rompatch' in new_data_lines[i]:
-      rom_patch_line = i
+    if '-- patch --' in new_data_lines[i]:
+      rom_patch_line = i+1
       break
 
   # Randomize spell/ shot length
   # Ensure at least one of the shots remains long for bosses (at least 20? might need to test)
-  # CCE2 - Length of normal shot, 25
-  # CCE3 : lenght of long shot, 29
-  spell1_timer = 25+random.randint(-3,2)*5
-  spell2_timer = 27+random.randint(-3,2)*5
+  # CCE2 - Length of normal shot, 0x25
+  # CCE3 : lenght of long shot, 0x29
+  spell1_timer = 0x25+random.randint(-5,1)*5
+  spell2_timer = 0x27+random.randint(-5,1)*5
   if spell1_timer<20 and spell2_timer<20:
     if random.random()>0.5:
       spell1_timer = 20
     else:
       spell2_timer = 20
-  new_data_lines.insert(rom_patch_line, f'rampatch CCE2 {spell1_timer} {spell2_timer} #Custom spell timers')
+  new_data_lines.insert(rom_patch_line, f'rampatch CCE2 {"{:02x}".format(spell1_timer)} {"{:02x}".format(spell2_timer)} #Custom spell timers')
 
   # Random chance for super fast skeletons
-  if random.random()>0.7:
+  if random.random()>0.75:
     new_data_lines.insert(rom_patch_line, f'rampatch EB2D EA EA #Fast Skeletons')  # NOP NOP instructions
 
+  # Random chance for skeletons to always throw bones
+  if random.random()>0.75:
+    new_data_lines.insert(rom_patch_line, f'rampatch EB31 EA EA #Skeletons always throw bones')  # NOP NOP instructions
+
+  # Randomize player jump timer slightly (Default 0xA)
+  random_jump_timer = 0xA + random.randint(-3,3)
+  new_data_lines.insert(rom_patch_line, f'rampatch D392 {"{:02x}".format(random_jump_timer)} # Random jump timer')
+
+  # Randomize player charge timer
+  # D53A sets initial value for charge timer, which is stored and incremented at 0x3A0. When it reaches 0x80 (the byte is no longer positive),
+  # then you can release for charge shot.
+  random_charge_time = 0x49 + random.randint(-30,20)
+  new_data_lines.insert(rom_patch_line, f'rampatch D53A {"{:02x}".format(random_charge_time)} # Random charge timer')
+
   apply_skeleton_movement_patch(new_data_lines)
+  apply_random_difficulty(new_data_lines)
+
+
+def apply_random_difficulty(new_data_lines: list):
+  """ Randomizes difficulty settings
+  00D912 .Difficulty_normalModeData - 82 63 02 98 02 80 19 B0 58 B4 8C 98 28 82 80 40 70 04 0C 1E 64
+  00D927 .Difficulty_hardModeData - 2D 4F 03 BA 03 60 00 FF 74 73 4C A8 1B 52 80 60 74 08 10 34 7C
+  00D93C .Difficulty_hellModeData - 01 42 04 D7 04 57 00 FF A8 69 4C D0 10 46 B0 70 A8 0B 13 60 A0
+
+  Each Difficulty data set contains the following list (gets copied to these location in RAM)
+  - Length 0x14
+  000568 .Difficulty_goatIdleTicks
+  000569 .Difficulty_goatBubbleDelay
+  00056A .Difficulty_goatBubbleCount
+  00056B .Difficulty_goatBubbleVelocity
+  00056C .Difficulty_goatBubbleSubVyFrac
+  00056D .Difficulty_trollIdleTicks
+  00056E .Difficulty_goblinJumpDelay
+  00056F .Difficulty_warthogVxFrac
+  000570 .Difficulty_ghostVFracLimit
+  000571 .Difficulty_boss2SparkDelay
+  000572 .Difficulty_boss2BarrelBaseDelay
+  000573 .Difficulty_boss2BarrelVelocity
+  000575 .Difficulty_boss3SpellDelay
+  000576 .Difficulty_boneVelocity
+  000577 .Difficulty_batVelocity
+  000578 .Difficulty_knightBatVelocity
+  000579 .Difficulty_willowispAccelerationSlow
+  00057A .Difficulty_willowispAccelerationFast
+  00057B .Difficulty_willowispVFracLimitSlow
+  00057C .Difficulty_willowispVFracLimitFast
+  """
+
+  ADDR_DIFFICULTY_NORMAL = 0x00D912
+  ADDR_DIFFICULTY_HARD = 0x00D927
+  ADDR_DIFFICULTY_HELL = 0x00D93C
+
+  DEFAULT_NORMAL = [0x82,0x63,0x02,0x98,0x02,0x80,0x19,0xB0,0x58,0xB4,0x8C,0x98,0x28,0x82,0x80,0x40,0x70,0x04,0x0C,0x1E,0x64]
+  DEFAULT_HARD = [0x2D,0x4F,0x03,0xBA,0x03,0x60,0x00,0xFF,0x74,0x73,0x4C,0xA8,0x1B,0x52,0x80,0x60,0x74,0x08,0x10,0x34,0x7C]
+  DEFAULT_HELL = [0x01,0x42,0x04,0xD7,0x04,0x57,0x00,0xFF,0xA8,0x69,0x4C,0xD0,0x10,0x46,0xB0,0x70,0xA8,0x0B,0x13,0x60,0xA0]
+
+  # modify each setting to 50%-150%. Use the same percentage for the same setting across difficulties.
+  # For example, make bats 130% speed across the entire game relative to current game mode.
+  random_percents = [random.randint(50,150)/100 for _ in range(len(DEFAULT_NORMAL))]
+
+  modded_normal = []
+  modded_hard = []
+  modded_hell = []
+
+  for i in range(len(DEFAULT_NORMAL)):
+    rnd_normal = clamp_to_byte(int(DEFAULT_NORMAL[i]*random_percents[i]))
+    rnd_hard = clamp_to_byte(int(DEFAULT_HARD[i]*random_percents[i]))
+    rnd_hell = clamp_to_byte(int(DEFAULT_HELL[i]*random_percents[i]))
+    modded_normal.append(rnd_normal)
+    modded_hard.append(rnd_hard)
+    modded_hell.append(rnd_hell)
+
+  # Write rompatches for each in the patch section
+  i = 0
+  for line in new_data_lines:
+    if line == '-- patch --':
+      break
+    i+=1
+
+  new_data_lines.insert(i+1, "; Custom Difficulty settings")
+  i+=1
+
+  # Write lines, without 0x in front of hex
+  new_data_lines.insert(i+1,"rampatch "+format(ADDR_DIFFICULTY_NORMAL, 'x')+" "+' '.join([format(x, 'x') for x in modded_normal]))
+  new_data_lines.insert(i+2,"rampatch "+format(ADDR_DIFFICULTY_HARD, 'x')+" "+' '.join([format(x, 'x') for x in modded_hard]))
+  new_data_lines.insert(i+3,"rampatch "+format(ADDR_DIFFICULTY_HELL, 'x')+" "+' '.join([format(x, 'x') for x in modded_hell]))
+
+  return new_data_lines
 
 
 def apply_skeleton_movement_patch(new_data_lines: list):
@@ -341,6 +435,13 @@ def randomize_enemy(enemy: str):
 
   rnd_enemy = random.choice(possible_enemies)
   return rnd_enemy
+
+def clamp_to_byte(n):
+  return max(min(255,n),0)
+
+def clamp_palette_color(n):
+  'should be values between 0x0 and 0x40 (inclusive)'
+  return max(0x0,min(0x40,n))
 
 # Run randomizer as a script if this file is launched directly
 if __name__ == '__main__':
