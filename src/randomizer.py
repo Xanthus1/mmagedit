@@ -43,6 +43,10 @@ same folder as this script.
 enemies = ['skeleton', 'bat', 'goat', 'bone', 'goblin', 'ghost', 'snake', 'troll', 'eye']
 floor_enemies = ['skeleton', 'goat', 'bone', 'goblin', 'snake', 'troll', 'eye']
 flight_enemies = ['bat', 'ghost']
+non_flight_enemies = ['skeleton', 'bone', 'snake', 'eye']
+
+# when these enemies are replaced, the new enemy will always maintain their direction
+directional_enemies = ['goat', 'snake', 'troll']
 
 # A 'safe' pool of enemies for replacing flying enemies (ones that fly/float or telegraph before falling like Goblin)
 flight_replace_enemies = ['bat', 'ghost', 'goblin', 'goat', 'troll'] #maybe eye?
@@ -76,6 +80,18 @@ def randomize_hack(filename: str, new_filename: str, seed: str):
           y_value -= 3
           new_line =  new_line[:y_index]+'y'+hex(y_value)+new_line[y_index+3:]
           # print('moving bat up :'+new_line)
+
+        if enemy not in directional_enemies and rnd_enemy in directional_enemies:
+          # Face towards center of the screen.
+          # if X value is > x10, on the right side of the screen
+          right_side = new_line.find(' x1')
+          reverse_x_index = new_line.find('-x')
+          if right_side>0 and reverse_x_index==-1 :
+            new_line += ' -x'
+
+          if right_side==-1 and reverse_x_index!=-1:
+            reverse_x_index = new_line.find('-x')
+            new_line = new_line[reverse_x_index:]
 
         # print('replaced with '+rnd_enemy)
         break
@@ -428,10 +444,10 @@ def randomize_enemy(enemy: str):
   possible_enemies = enemies.copy()
   # if a bat or ghost, don't randomize to skeleton or bone (they don't fall)
   if enemy in flight_enemies:
-    # No longer needed due to new skeleton patch: possible_enemies.remove('skeleton')
-    # however, may want to include so they don't fall on your head when spawning
-
-    possible_enemies.remove('bone')
+    # Don't drop enemies that are too quick to respond to on the players head
+    # TODO: Remove Skeleton once I finish ceiling skeleton patch
+    for non_flight_enemy in non_flight_enemies:
+      possible_enemies.remove(non_flight_enemy)
 
   rnd_enemy = random.choice(possible_enemies)
   return rnd_enemy
