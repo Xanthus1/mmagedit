@@ -149,11 +149,6 @@ def randomize_hack(filename: str, new_filename: str, seed: str):
         while color_b in blacks_or_whites:
           color_b = clamp_palette_color(color_b+random.randint(-4,4))
 
-      '''
-      color_r = random.randint(16,40)
-      color_g = 40-int(color_r)
-      color_b = 20
-      '''
       new_line = f'{new_line[:2]} {hex(color_r)} {hex(color_g)} {hex(color_b)}'
       # print(new_line)
 
@@ -456,8 +451,8 @@ def clamp_to_byte(n):
   return max(min(255,n),0)
 
 def clamp_palette_color(n):
-  'should be values between 0x0 and 0x40 (inclusive)'
-  return max(0x0,min(0x40,n))
+  'should be values between 0x0 and 0x3D (inclusive)'
+  return max(0x0,min(0x3D,n))
 
 # Run randomizer as a script if this file is launched directly
 if __name__ == '__main__':
