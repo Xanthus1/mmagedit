@@ -5,12 +5,16 @@ Micro Mages Randomizer Script
 By Xanthus
 Skeleton movement patch by nstbayless (NaOH).
 
-Currently randomizes enemies, player shot distances, difficulty settings,
-some enemy behavior, and some level hazards (trampolines / fans).
-Also includes patch for skeletons to walk over bridges and fall.
+Currently randomizes:
+  * enemy locations, and stats / behavior
+  * player shot distances, jump heights, charge time
+  * difficulty settings
+  * seam shifts to alter level geometry,
+  * some level hazards (trampolines / fans).
+  * Also includes patch for skeletons to walk over bridges and fall down.
 
 Known issues/limitations:
-- Currently if you try to randomize an already randomized patch, there will be
+* Currently if you try to randomize an already randomized patch, there will be
   an issue due to applying the same asm patches with conflicting labels, as well
   as some rom patches being added on, but not necessarily overwriting older
   rom patches. Always randomize from a fresh Base ROM until this is handled properly.
@@ -25,19 +29,14 @@ same folder as this script.
 '''
 
 # TODO Ideas:
-  # Face enemies towards center of screen? (If they're not an enemy whose direction matters. Snakes/trolls/etc. should keep direction when replaced. But skeletons often face away to start.)
   # Move enemies to floor/ open space? (Wish list, this will take extra dev)
   # Randomize jumpthrough platforms to boxes and/or having open spaces
   # Randomize some empty spaces to have some jump through platforms?
-  # 'wisp' is a special super-tanky enemy... might not be able to just swap these in due to difficulty without editing HP / behavior
   # Randomize whether snakes can see behind
   # Randomize eye movement / jump height / speed
   # Randomize lightning/spark to an upward fan on the floor, or some other hazard
-  # randomize speed (or at what difficulties enemies move faster)
-  # Randomize bone speed
-  # randomize player charge shot time / damage.
   # Maybe track difficulty of the seed, make sure all randomizations don't go to higher difficulty?
-  # Some ghost spawns are in walls, and maybe shouldn't be replaced
+  # Some ghost spawns are in walls, and shouldn't be replaced
     # test for solid space, or ignore randomizing specific spawns
 
 enemies = ['skeleton', 'bat', 'goat', 'bone', 'goblin', 'ghost', 'snake', 'troll', 'eye']
@@ -51,6 +50,29 @@ directional_enemies = ['goat', 'snake', 'troll']
 # A 'safe' pool of enemies for replacing flying enemies (ones that fly/float or telegraph before falling like Goblin)
 flight_replace_enemies = ['bat', 'ghost', 'goblin', 'goat', 'troll'] #maybe eye?
 
+# list of {level}-{height-in-minitiles} to ignore seam shifting on
+  # Level is (0-13), height is in minitiles (decimal, increments of 4 per MetaTile row)
+prevent_seam_shift_heights = [
+  # Tower 1-2, Don't move seam for the first relic
+  "1-0", "1-4", "1-8", "1-12", "1-16", "1-20",
+  # Tower 3-2, One block wide paths that can get blocked in normal and hard mode
+  "7-16", "7-20", "7-24", "7-28",
+  # Tower 4-1, running against fan can get blocked (1block)
+  "9-40", "9-44",
+  # Tower 4-4
+    # 60-68 Pipe warps / single breakable blocks are necessary for movement
+    # 92-96 the warps are on different row than shifted tiles, would need extra logic to ensure you have ground to warp on.
+  "12-60", "12-64","12-68", "12-92", "12-96",
+]
+
+# Prevent shifting seams on boss rooms / gate leading up to bosses
+for i in range(0,36,4):
+  prevent_seam_shift_heights.append(f"2-{i}")
+  prevent_seam_shift_heights.append(f"5-{i}")
+  prevent_seam_shift_heights.append(f"8-{i}")
+  prevent_seam_shift_heights.append(f"11-{i}")
+  prevent_seam_shift_heights.append(f"12-{i}")
+
 def randomize_hack(filename: str, new_filename: str, seed: str):
   random.seed(seed)
 
@@ -62,9 +84,42 @@ def randomize_hack(filename: str, new_filename: str, seed: str):
   data_lines = data.split('\n')
   new_data_lines = []
 
+  prev_row_shifted=False
+  shifted_rows = {}
+  # shifted_rows is a dict, key is the level number, and value is another dict, { level_height => shift_amount }
+  current_level=0
+  # Height in Microtiles (used by entities). Starts at 0 at the top, 4 per row.
+  current_height=0
+
   print('Randomizing ...')
   for line in data_lines:
     new_line = line
+
+    # Store current level that's being edited
+    if "-- level " in new_line:
+      current_level = int(new_line[9], 16)
+      shifted_rows[current_level] = {}
+      current_height=0
+
+    # Shift seam position by 1 randomly (two microtiles to the left or right)
+    # These lines are the only ones with a colon as the second character
+    if new_line[1:2] == ':':
+      rando_shift_amount = 0
+      if prev_row_shifted or f"{current_level}-{current_height}" in prevent_seam_shift_heights:
+        # To make sure level is still completable, don't shift 2 rows next to each other (otherwise, you could close a necessary gap)
+        prev_row_shifted = False
+      else:
+        rando_shift_amount = random.randint(-1,1)
+        # TODO: need to store, and shift entities by this amount too (for spikes/jumps to match tiles, etc)
+        shift = int(new_line[0], 16)
+        shift = (rando_shift_amount+shift) % 0x10
+        new_line = "{:x}: ".format(shift) + new_line[3:]
+        prev_row_shifted = True
+
+      # store rando_shift
+      shifted_rows[current_level][current_height] = rando_shift_amount
+      current_height+=4 # move down one metatile (4 microtiles)
+
     for enemy in enemies:
       if '- '+enemy in line:
         # print('found "- '+enemy+'" in "'+line+'"')
@@ -91,10 +146,26 @@ def randomize_hack(filename: str, new_filename: str, seed: str):
 
           if right_side==-1 and reverse_x_index!=-1:
             reverse_x_index = new_line.find('-x')
-            new_line = new_line[reverse_x_index:]
+            new_line = new_line[:reverse_x_index]
 
         # print('replaced with '+rnd_enemy)
         break
+
+    # Shift all entities based on row shift
+    # Finale level (13) doesn't have shifted tiles
+    if new_line[0:2] == '- ' and new_line.find(' x') and current_level!=13:
+      x_index = new_line.find(' x')+1
+      x_value = int(new_line[x_index+1:x_index+4], 16)
+      y_index = new_line.find(' y')+1
+      y_value = int(new_line[y_index+1:y_index+4], 16)
+      entity_row_height = y_value - (y_value%4) # Align to metatiles (4 microtiles per metatile)
+
+      entity_row_shift = shifted_rows[current_level][entity_row_height]
+      if entity_row_shift != 0:
+        x_value += entity_row_shift*2   # move two microtiles
+        new_line = new_line[:x_index] + "x{:02x}".format(x_value) + new_line[x_index+3:]
+
+
     if '- torch' in new_line:
       # 25% chance for torch to turn into ghost or bat
       if '- torch      * x0d y15' not in new_line and random.random()>.75:
