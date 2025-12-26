@@ -66,7 +66,7 @@ prevent_seam_shift_heights = [
 ]
 
 # Prevent shifting seams on boss rooms / gate leading up to bosses
-for i in range(0,36,4):
+for i in range(0,40,4):
   prevent_seam_shift_heights.append(f"2-{i}")
   prevent_seam_shift_heights.append(f"5-{i}")
   prevent_seam_shift_heights.append(f"8-{i}")
