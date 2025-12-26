@@ -404,8 +404,8 @@ def apply_skeleton_movement_patch(new_data_lines: list):
   skeleton_movement_patch = '''
   ; can probably push this earlier...
   ; this is within the region of the original rom where level data was stored
-  ; but the mapper hack only uses the start of that space, well before e600
-  org $e600
+  ; but the mapper hack only uses the start of that space, well before e600 (testing e100)
+  org $e100
 
   skeleton_new_walkState:
       lda #$00
@@ -476,8 +476,7 @@ def apply_skeleton_movement_patch(new_data_lines: list):
   ChangeDirection_Yes:
       jmp $A872 ; change direction
 
-
-  ;max $e6ee ; [end of levels, in original rom; mapper hack doesn't use this space]
+  end $e200
 
   ; ---
 
@@ -489,7 +488,9 @@ def apply_skeleton_movement_patch(new_data_lines: list):
 
   org $EB63
       ; skeleton do walk
-      jmp ChangeDirection_UnlessBigSkeletonOnBridge'''
+      jmp ChangeDirection_UnlessBigSkeletonOnBridge
+
+  '''
 
   skeleton_movement_patch_lines = skeleton_movement_patch.split('\n')
 

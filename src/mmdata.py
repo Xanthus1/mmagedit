@@ -1814,7 +1814,7 @@ class MMData:
 ;   sta [ent_x, x]
 ;   rts
 ;   db #15
-; max $C010 ; ensure code does not exceed patch region 
+; end $C010 ; ensure code does not exceed patch region
 """
                 
             return True
